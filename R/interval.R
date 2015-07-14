@@ -10,14 +10,18 @@ interval <- function(x, a=-Inf, b=Inf, reflect=TRUE)
      ### Initial Checks
      if(missing(x)) stop("The x argument is required.")
      if(a > b) stop("a > b.")
-     if(reflect & is.finite(a) & is.finite(b) & any(!is.finite(x))) {
-               if(is.array(x)) {
+     if(reflect & is.finite(a) & is.finite(b)) {
+          if(is.array(x)) {
                     d <- dim(x)
                     x <- as.vector(x)}
+          #Infinity is mapped to bounds
+          if(any(!is.finite(x))) {
                x.inf.pos <- !is.finite(x);
-               x[x.inf.pos] <- interval(x[x.inf.pos], a, b, reflect=FALSE)
-               if(is.array(x)) x <- array(x, dim=d)
-          }
+               x[x.inf.pos] <- interval(x[x.inf.pos], a, b, reflect=FALSE)}
+          #Optimization for finite intervals
+          x[x>b] <- ((x[x>b]-b) %% 2*(b-a))+b
+          x[x<a] <- -((-x[x<a]-a) %% 2*(b-a))-a
+          if(is.array(x)) x <- array(x, dim=d)}
      ### Scalar
      if(is.vector(x) & {length(x) == 1}) {
           if(reflect == FALSE) x <- max(a, min(b, x))
