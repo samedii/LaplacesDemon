@@ -94,6 +94,13 @@ LaplacesDemon <- function(Model, Data, Initial.Values, Covar=NULL,
                if(!all(c("A","B","m","n","w") %in% names(Specs)))
                     stop("The Specs argument is incorrect.", file=LogFile,
                          append=TRUE)
+               if(is.null(Specs[["Bounds"]])) {
+                    Specs[["Bounds"]] <- c(-Inf,Inf)}
+               if(!is.list(Specs[["Bounds"]])) {
+                    Bounds <- list()
+                    for (i in 1:length(Initial.Values))
+                         Bounds[[i]] <- Specs[["Bounds"]]
+                    Specs[["Bounds"]] <- Bounds}
                Specs[["A"]] <- min(round(abs(Specs[["A"]])), Iterations)
                Specs[["m"]] <- abs(round(Specs[["m"]]))
                if(!identical(length(Specs[["m"]]), length(Initial.Values)))
@@ -1776,10 +1783,11 @@ LaplacesDemon <- function(Model, Data, Initial.Values, Covar=NULL,
      Debug, LogFile)
      {
      A <- Specs[["A"]]
-     Block <- Specs[["B"]]
      m <- Specs[["m"]]
      n <- Specs[["n"]]
      w <- Specs[["w"]]
+     Bounds <- Specs[["Bounds"]]
+     Block <- Specs[["B"]]
      B <- length(Block)
      targetRatio <- 0.5
      if(B == 0) {
@@ -1817,8 +1825,12 @@ LaplacesDemon <- function(Model, Data, Initial.Values, Covar=NULL,
                     ### Step Out
                     count <- 0
                     while (count <= m[j]) {
-                         Mo1 <- try(Model(Mo0[["parm"]] +
-                              lower*factors[,j], Data),
+                         parm <- Mo0[["parm"]] + lower*factors[,j]
+                         if(parm[j] < Bounds[[j]][1]) {
+                              lower <- (Bounds[[j]][1]-Mo0[["parm"]][j])/factors[j,j]
+                              parm <- Mo0[["parm"]] + lower*factors[,j]
+                              break}
+                         Mo1 <- try(Model(parm, Data),
                               silent=!Debug[["DB.Model"]])
                          if(inherits(Mo1, "try-error")) {
                               if(Debug[["DB.Model"]] == TRUE)
@@ -1827,7 +1839,6 @@ LaplacesDemon <- function(Model, Data, Initial.Values, Covar=NULL,
                                         Data[["parm.names"]][j],
                                         "in step", count+1, ".\n",
                                         file=LogFile, append=TRUE)
-                              lower <- lower + w[j]
                               break}
                          else if(!is.finite(Mo1[["LP"]])) {
                               if(Debug[["DB.Model"]] == TRUE)
@@ -1836,18 +1847,21 @@ LaplacesDemon <- function(Model, Data, Initial.Values, Covar=NULL,
                                         "resulted in a non-finite LP",
                                         "in step", count+1, ".\n",
                                         file=LogFile, append=TRUE)
-                              lower <- lower + w[j]
                               break}
-                         nExpands[j] <- nExpands[j] + 1
                          if(Mo1[["LP"]] <= y.slice) break
+                         nExpands[j] <- nExpands[j] + 1
                          lower <- lower - w[j]
                          count <- count + 1
                          }
                     count <- 0
                     while (count <= m[j]) {
-                         Mo1 <- try(Model(Mo0[["parm"]] +
-                              upper*factors[,j], Data),
-                              silent=!Debug[["DB.Model"]])
+                         parm <- Mo0[["parm"]] + upper*factors[,j]
+                         if(parm[j] > Bounds[[j]][2]) {
+                              upper <- (Bounds[[j]][2]-Mo0[["parm"]][j])/factors[j,j]
+                              parm <- Mo0[["parm"]] + upper*factors[,j]
+                              break}
+                         Mo1 <- try(Model(parm, Data),
+                              silent=!Debug[["DB.Model"]]) 
                          if(inherits(Mo1, "try-error")) {
                               if(Debug[["DB.Model"]] == TRUE)
                                    cat("\nWARNING: Stepping out the upper",
@@ -1855,7 +1869,6 @@ LaplacesDemon <- function(Model, Data, Initial.Values, Covar=NULL,
                                         Data[["parm.names"]][j],
                                         "in step", count+1, ".\n",
                                         file=LogFile, append=TRUE)
-                              upper <- upper - w[j]
                               break}
                          else if(!is.finite(Mo1[["LP"]])) {
                               if(Debug[["DB.Model"]] == TRUE)
@@ -1864,18 +1877,16 @@ LaplacesDemon <- function(Model, Data, Initial.Values, Covar=NULL,
                                         "resulted in a non-finite LP",
                                         "in step", count+1, ".\n",
                                         file=LogFile, append=TRUE)
-                              upper <- upper - w[j]
                               break}
-                         nExpands[j] <- nExpands[j] + 1
                          if(Mo1[["LP"]] <= y.slice) break
+                         nExpands[j] <- nExpands[j] + 1
                          upper <- upper + w[j]
                          count <- count + 1
                          }
                     ### Rejection Sampling
                     repeat {
-                         lower <- -abs(min(lower, upper))
-                         upper <- abs(max(lower, upper))
                          prop <- runif(1, lower, upper)
+                         if(is.na(prop)) break
                          Mo1 <- try(Model(Mo0[["parm"]] + prop *
                               factors[,j], Data),
                               silent=!Debug[["DB.Model"]])
@@ -1885,8 +1896,7 @@ LaplacesDemon <- function(Model, Data, Initial.Values, Covar=NULL,
                                         "failed for",
                                         Data[["parm.names"]][j], "\n",
                                         file=LogFile, append=TRUE)
-                              Mo1 <- Mo0
-                              }
+                              Mo1 <- Mo0}
                          else if(any(!is.finite(c(Mo1[["LP"]], Mo1[["Dev"]],
                               Mo1[["Monitor"]])))) {
                               if(Debug[["DB.Model"]] == TRUE)
@@ -1895,8 +1905,8 @@ LaplacesDemon <- function(Model, Data, Initial.Values, Covar=NULL,
                                         "resulted in non-finite value(s).\n",
                                         file=LogFile, append=TRUE)
                               Mo1 <- Mo0}
-                         if(Mo1[["LP"]] >= y.slice) break
-                         else if(abs(prop) < 1e-100) break
+                         else if(Mo1[["LP"]] >= y.slice) break
+                         else if(upper-lower < 1e-100) break
                          nShrinks[j] <- nShrinks[j] + 1
                          if(prop < 0) lower <- prop
                          else upper <- prop
@@ -2069,6 +2079,7 @@ LaplacesDemon <- function(Model, Data, Initial.Values, Covar=NULL,
                               lower <- -abs(min(lower, upper))
                               upper <- abs(max(lower, upper))
                               u <- runif(1, lower, upper)
+                              if(is.na(u)) break
                               prop[Block[[b]]] <- prop[Block[[b]]] +
                                    u*factors[[b]][,bj]
                               Mo1 <- try(Model(prop, Data),
