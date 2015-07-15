@@ -1878,7 +1878,7 @@ LaplacesDemon <- function(Model, Data, Initial.Values, Covar=NULL,
                                         "in step", count+1, ".\n",
                                         file=LogFile, append=TRUE)
                               break}
-                         if(Mo1[["LP"]] <= y.slice) break
+                         else if(Mo1[["LP"]] <= y.slice) break
                          nExpands[j] <- nExpands[j] + 1
                          upper <- upper + w[j]
                          count <- count + 1
@@ -4862,7 +4862,7 @@ LaplacesDemon <- function(Model, Data, Initial.Values, Covar=NULL,
                Mo1 <- Mo0}
           else {
                ### Importance Densities (dmvn)
-               d1 <- log(.dmvnInterval(prop,mu,Omega))
+               d1 <- log(.dmvnInterval(Mo1[["parm"]],mu,Omega))
                d0 <- log(.dmvnInterval(Mo0[["parm"]],mu,Omega))
                ### Accept/Reject
                log.u <- log(runif(1))
