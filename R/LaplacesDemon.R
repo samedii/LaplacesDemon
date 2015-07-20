@@ -1906,7 +1906,7 @@ LaplacesDemon <- function(Model, Data, Initial.Values, Covar=NULL,
                                         file=LogFile, append=TRUE)
                               Mo1 <- Mo0}
                          else if(Mo1[["LP"]] >= y.slice) break
-                         else if(upper-lower < 1e-100) break
+                         if(upper-lower < 1e-100) break
                          nShrinks[j] <- nShrinks[j] + 1
                          if(prop < 0) lower <- prop
                          else upper <- prop
