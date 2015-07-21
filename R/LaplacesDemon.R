@@ -94,13 +94,6 @@ LaplacesDemon <- function(Model, Data, Initial.Values, Covar=NULL,
                if(!all(c("A","B","m","n","w") %in% names(Specs)))
                     stop("The Specs argument is incorrect.", file=LogFile,
                          append=TRUE)
-               if(is.null(Specs[["Bounds"]])) {
-                    Specs[["Bounds"]] <- c(-Inf,Inf)}
-               if(!is.list(Specs[["Bounds"]])) {
-                    Bounds <- list()
-                    for (i in 1:length(Initial.Values))
-                         Bounds[[i]] <- Specs[["Bounds"]]
-                    Specs[["Bounds"]] <- Bounds}
                Specs[["A"]] <- min(round(abs(Specs[["A"]])), Iterations)
                Specs[["m"]] <- abs(round(Specs[["m"]]))
                if(!identical(length(Specs[["m"]]), length(Initial.Values)))
@@ -1786,7 +1779,6 @@ LaplacesDemon <- function(Model, Data, Initial.Values, Covar=NULL,
      m <- Specs[["m"]]
      n <- Specs[["n"]]
      w <- Specs[["w"]]
-     Bounds <- Specs[["Bounds"]]
      Block <- Specs[["B"]]
      B <- length(Block)
      targetRatio <- 0.5
@@ -1826,10 +1818,6 @@ LaplacesDemon <- function(Model, Data, Initial.Values, Covar=NULL,
                     count <- 0
                     while (count <= m[j]) {
                          parm <- Mo0[["parm"]] + lower*factors[,j]
-                         if(parm[j] < Bounds[[j]][1]) {
-                              lower <- (Bounds[[j]][1]-Mo0[["parm"]][j])/factors[j,j]
-                              parm <- Mo0[["parm"]] + lower*factors[,j]
-                              break}
                          Mo1 <- try(Model(parm, Data),
                               silent=!Debug[["DB.Model"]])
                          if(inherits(Mo1, "try-error")) {
@@ -1848,7 +1836,7 @@ LaplacesDemon <- function(Model, Data, Initial.Values, Covar=NULL,
                                         "in step", count+1, ".\n",
                                         file=LogFile, append=TRUE)
                               break}
-                         if(Mo1[["LP"]] <= y.slice) break
+                         else if(Mo1[["LP"]] <= y.slice) break
                          nExpands[j] <- nExpands[j] + 1
                          lower <- lower - w[j]
                          count <- count + 1
@@ -1856,10 +1844,6 @@ LaplacesDemon <- function(Model, Data, Initial.Values, Covar=NULL,
                     count <- 0
                     while (count <= m[j]) {
                          parm <- Mo0[["parm"]] + upper*factors[,j]
-                         if(parm[j] > Bounds[[j]][2]) {
-                              upper <- (Bounds[[j]][2]-Mo0[["parm"]][j])/factors[j,j]
-                              parm <- Mo0[["parm"]] + upper*factors[,j]
-                              break}
                          Mo1 <- try(Model(parm, Data),
                               silent=!Debug[["DB.Model"]]) 
                          if(inherits(Mo1, "try-error")) {
@@ -1885,7 +1869,7 @@ LaplacesDemon <- function(Model, Data, Initial.Values, Covar=NULL,
                          }
                     ### Rejection Sampling
                     repeat {
-                         prop <- runif(1, lower, upper)
+                         prop <- try(runif(1, lower, upper), silent=TRUE)
                          if(is.na(prop)) break
                          Mo1 <- try(Model(Mo0[["parm"]] + prop *
                               factors[,j], Data),
@@ -4773,7 +4757,6 @@ LaplacesDemon <- function(Model, Data, Initial.Values, Covar=NULL,
      Debug, LogFile)
      {
      mu <- Specs[["mu"]]
-     Bounds <- Specs[["Bounds"]]
      VarCov <- as.positive.definite(as.symmetric.matrix(VarCov))
      Omega <- as.inverse(VarCov)
      U <- chol(VarCov)
@@ -4782,65 +4765,14 @@ LaplacesDemon <- function(Model, Data, Initial.Values, Covar=NULL,
      .dmvn <- function(x,mu,Omega) {
           ss <- x - mu
           z <- rowSums({ss %*% Omega} * ss)
-          exp(sum(-0.5 * (LIV * log(2*pi) + sum(log(d))) - (0.5*z)))}
-     .dmvnInterval <- function(x,mu,Omega,iterVariable=1) {
-          i <- iterVariable
-          l <- 0
-          a <- Bounds[[i]][1]
-          b <- Bounds[[i]][2]
-          #Current
-          if(i==LIV)
-               l <- l + .dmvn(x,mu,Omega)
-          else
-               l <- l + .dmvnInterval(x,mu,Omega,i+1)
-          #Start plus
-          conditionsFulfilled <- 0
-          n <- 1
-          xPlus <- x
-          repeat {
-               if(n %% 2 == 0) xPlus[i] <- 2*a-xPlus[i]
-               else xPlus[i] <- 2*b-xPlus[i]
-               if(!is.finite(xPlus[i])) break
-               .l <- 0
-               if(i>=LIV)
-                    .l <- .dmvn(xPlus,mu,Omega)
-               else
-                    .l <- .dmvnInterval(xPlus,mu,Omega,i+1)
-               l <- l+.l
-               if(.l < e) conditionsFulfilled<-conditionsFulfilled+1
-               if(conditionsFulfilled >= 2) break
-               n<-n+1}
-          #Start minus
-          conditionsFulfilled <- 0
-          n <- -1
-          xMinus <- x
-          repeat {
-               if(n %% 2 == 0) xMinus[i] <- 2*b-xMinus[i]
-               else xMinus[i] <- 2*a-xMinus[i]
-               if(!is.finite(xMinus[i])) break
-               .l <- 0
-               if(i>=LIV)
-                    .l <- .dmvn(xMinus,mu,Omega)
-               else
-                    .l <- .dmvnInterval(xMinus,mu,Omega,i+1)
-               l <- l+.l
-               if(.l < e) conditionsFulfilled<-conditionsFulfilled+1
-               if(conditionsFulfilled >= 2) break
-               n<-n-1}
-          l}
-     for (iter in 1:Iterations) {
-          ### Print Status
-          if(iter %% Status == 0)
-               cat("Iteration: ", iter, sep="", file=LogFile, append=TRUE)
+          sum(-0.5 * (LIV * log(2*pi) + sum(log(d))) - (0.5*z))}
+     iter <- 1
+     repeat {
           ### Propose new parameter values
           MVNz <- try(rbind(rnorm(LIV)) %*% U, silent=TRUE)
           if(!inherits(MVNz, "try-error")) {
-               if(iter %% Status == 0)
-                   cat(",   Proposal: Multivariate,   LP: ",
-                        round(Mo0[["LP"]],1), "\n", sep="",
-                        file=LogFile, append=TRUE)
                prop <- as.vector(mu) + as.vector(MVNz)}
-          else {prop <- as.vector(Mo0[["parm"]])}
+          else break
           ### Log-Posterior of the proposed state
           Mo1 <- try(Model(prop, Data), silent=!Debug[["DB.Model"]])
           if(inherits(Mo1, "try-error")) {
@@ -4850,7 +4782,7 @@ LaplacesDemon <- function(Model, Data, Initial.Values, Covar=NULL,
                     cat("  Iteration:", iter, "Proposal:\n",
                          paste("c(",paste(prop, collapse=","),")",
                          sep=""), "\n", file=LogFile, append=TRUE)}
-               Mo1 <- Mo0}
+               next}
           else if(any(!is.finite(c(Mo1[["LP"]], Mo1[["Dev"]],
                Mo1[["Monitor"]])))) {
                if(Debug[["DB.Model"]] == TRUE) {
@@ -4859,23 +4791,31 @@ LaplacesDemon <- function(Model, Data, Initial.Values, Covar=NULL,
                     cat("  Iteration:", iter, "Proposal:\n",
                          paste("c(",paste(prop, collapse=","),")",
                          sep=""), "\n", file=LogFile, append=TRUE)}
-               Mo1 <- Mo0}
+               next}
           else {
                ### Importance Densities (dmvn)
-               d1 <- log(.dmvnInterval(Mo1[["parm"]],mu,Omega))
-               d0 <- log(.dmvnInterval(Mo0[["parm"]],mu,Omega))
+               d1 <- .dmvn(Mo1[["parm"]],mu,Omega)
+               d0 <- .dmvn(Mo0[["parm"]],mu,Omega)
                ### Accept/Reject
                log.u <- log(runif(1))
                log.alpha <- Mo1[["LP"]] - Mo0[["LP"]] + d1 - d0
                if(log.u < log.alpha && is.finite(log.alpha)) {
                     Mo0 <- Mo1
                     Acceptance <- Acceptance + 1}}
+          ### Print Status
+          if(iter %% Status == 0) {
+               cat("Iteration: ", iter, ",   Proposal: Multivariate,   LP: ",
+                        round(Mo0[["LP"]],1), "\n", sep="",
+                        file=LogFile, append=TRUE)
+          }
           ### Save Thinned Samples
           if(iter %% Thinning == 0) {
                t.iter <- floor(iter / Thinning) + 1
                thinned[t.iter,] <- Mo0[["parm"]]
                Dev[t.iter] <- Mo0[["Dev"]]
                Mon[t.iter,] <- Mo0[["Monitor"]]}
+          iter <- iter + 1
+          if(iter >= Iterations) break
           }
      ### Output
      out <- list(Acceptance=Acceptance,
