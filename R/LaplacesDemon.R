@@ -4814,8 +4814,8 @@ LaplacesDemon <- function(Model, Data, Initial.Values, Covar=NULL,
                thinned[t.iter,] <- Mo0[["parm"]]
                Dev[t.iter] <- Mo0[["Dev"]]
                Mon[t.iter,] <- Mo0[["Monitor"]]}
-          iter <- iter + 1
           if(iter >= Iterations) break
+          iter <- iter + 1
           }
      ### Output
      out <- list(Acceptance=Acceptance,
