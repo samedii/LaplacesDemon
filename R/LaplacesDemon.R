@@ -7433,8 +7433,6 @@ LaplacesDemon <- function(Model, Data, Initial.Values, Covar=NULL,
                          if(L < Bounds[[b]][1]) L <- Bounds[[b]][1] 
                          if(R > Bounds[[b]][2]) R <- Bounds[[b]][2]
                          ### Rejection Sampling
-                         iter2.limit <- 1e3
-                         iter2 <- 0
                          repeat {
                               prop[j] <- sample(L:R,1)
                               Mo1 <- try(Model(prop, Data),
@@ -7465,10 +7463,6 @@ LaplacesDemon <- function(Model, Data, Initial.Values, Covar=NULL,
                                    Mo1 <- Mo0}
                               if(Mo1[["LP"]] >= y.slice) break
                               else if(abs(R-L) < 1e-100) break
-                              else if(iter2>iter2.limit) {
-                                   cat('BROKE, y.slice: ', y.slice, 'n')
-                                   break }
-                              iter2 <- iter2+1
                               if(Mo1[["parm"]][j] > Mo0[["parm"]][j])
                                    R <- Mo1[["parm"]][j]
                               else L <- Mo1[["parm"]][j]}
